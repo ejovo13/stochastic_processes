@@ -1,0 +1,60 @@
+---
+title: "TP1: Chaines de Markov"
+author: "Evan Voyles"
+date: "May 11"
+output:
+    pdf_document:
+        highlight: "zenburn"
+        fig_width: 4
+        fig_height: 3
+---
+
+<!-- 1. Quelle est la loi de la variable al ́eatoire X simulee a partir du code suivant ? -->
+Quelle est la loi de la variable aleatoire X simulee a partir du code suivant?
+
+```{R}
+library(tidyverse)
+
+get_x <- function() {
+
+    p <- c(1/8,1/2,1/8,1/4)
+    p1 <- c(0,p[1:3])
+    t <- runif(1)
+    u <- (t > cumsum(p1)) & (t < cumsum(p))
+    X <- which(u==1)
+
+    X
+}
+
+get_xn <- function(n) {
+
+    x <- rep(0, n)
+    for (i in seq_len(n)) {
+        x[i] <- get_x()
+    }
+
+    x
+
+}
+
+n <- 1e5
+x <- get_xn(n)
+
+df <- tibble(x)
+df |> ggplot(aes(x)) + #geom_histogram()
+    geom_bar(aes(y = ..prop..))
+
+
+x <- tibble(X = 1:4, count = XS)
+
+df |> ggplot(aes(x)) + geom_point()
+
+# ggplot(data=tips, aes(x=day)) +
+#   geom_bar(aes(y = ..prop.., group = 1))
+
+
+```
+
+```{r}
+
+```
