@@ -21,3 +21,132 @@ Un randonneur se trouve face à un dilemme classique : il aimerait emmener avec 
 ne souhaite pas alourdir inutiliment son sac, qui ne doit pas dépasser un certain poids $P$. Il cherche donc à déterminer la combinaison d'affaire
 qui vérifierait le meilleur rapport utilité/légèreté. Pour ce faire, il associe à chacune de ses $M$ affaires, son poids $p_i$ et sa valeur
 $v_i$ pour $i \in \{1, \dots, M\}$. L'objectif est de trouver la configuration qui maximise la valeur du sac à dos sans dépasser $P$.
+
+\begin{enumerate}
+    \item On condidère un vecteur $\sigma$ (qui contient 0 ou 1 pour l'entrée $i$ selon que l'objet $i$ ait été choisi pour remplir le sac à dos). On
+    choisit initialement un vecteur $\sigma$ tel que
+\end{enumerate}
+
+```{R}
+
+# A partir d'une configuration \sigma, proposer \sigma' en modifiant aleatoirement l'un des
+# \sigma_i par (1 - \sigma_i)
+propose_sigma_prime <- function(sig) {
+
+    n <- length(sig)
+    i <- sample(1:n, 1)
+
+    sig[i] <- 1 - sig[i]
+    sig
+}
+
+# Return the total weight of the items carried
+total_weight <- function(sig, poids) {
+    sum(sig * poids)
+}
+
+total_valeur <- function(sig, valeur) {
+    sum(sig * valeur)
+}
+
+# We'll use the transition matrix Q(. | V) = N(V, 1)
+# En sachant que \pi(\sigma') / \pi(\sigma) = exp(V_{\sigma'} - V_\sigma),
+# On implemente l'algorithme de metropolis hastings comme suivant:
+taux_accept <- function(sig, sig_prime, valeur) {
+    min(exp(total_valeur(sig, valeur) - total_valeur(sig_prime, valeur)), 1)
+}
+
+```
+
+```{R}
+item <- c("map", "water", "sandwich", "glucose", "tin", "banana", "apple", "cheese",
+          "beer", "suntan_cream", "camera", "T-shirts", "trousers", "umbrella",
+          "waterproof_trousers", "waterproof_overclothes", "note-case", "sunglasses", "towel",
+          "socks", "book")
+p <- c(0.05, 1, 0.7, 0.1, 0.5, 0.2, 0.3, 0.4, 0.5, 0.3, 1, 0.8, 0.4, 0.7, 0.4, 0.3, 0.4, 0.1, 0.3, 0.4, 0.7)
+v <- c(150, 300, 160, 60, 45, 60, 40, 30, 180, 70, 30, 100, 10, 40, 70, 75, 50, 80, 12, 50, 30)
+P <- 7
+n_it <- 1e1
+n_items <- length(item)
+
+
+next_sigma <- function(sig, poids, valeur, P) {
+
+    sig_prime <- propose_sigma_prime(sig)
+
+    if (total_weight(sig_prime, poids) > P) {
+        return(sig)
+    }
+
+    r <- taux_accept(sig, sig_prime, valeur)
+
+    if (runif(1) < r) {
+        # Then we accept sig_prime
+        return(sig)
+    } else {
+        # We keep sig
+        return(sig_prime)
+    }
+
+}
+
+sigma_0 <- rep(0, n_items)
+traj <- list(sigma_0)
+
+item <- c("map", "water", "sandwich", "glucose", "tin", "banana", "apple", "cheese",
+          "beer", "suntan_cream", "camera", "T-shirts", "trousers", "umbrella",
+          "waterproof_trousers", "waterproof_overclothes", "note-case", "sunglasses", "towel",
+          "socks", "book")
+p <- c(0.05, 1, 0.7, 0.1, 0.5, 0.2, 0.3, 0.4, 0.5, 0.3, 1, 0.8, 0.4, 0.7, 0.4, 0.3, 0.4, 0.1, 0.3, 0.4, 0.7)
+v <- c(150, 300, 160, 60, 45, 60, 40, 30, 180, 70, 30, 100, 10, 40, 70, 75, 50, 80, 12, 50, 30)
+P <- 7
+n_it <- 1e3
+n_items <- length(item)
+
+
+next_sigma <- function(sig, poids, valeur, P) {
+
+    sig_prime <- propose_sigma_prime(sig)
+
+    if (total_weight(sig_prime, poids) > P) {
+        return(sig)
+    }
+
+    r <- taux_accept(sig, sig_prime, valeur)
+
+    if (runif(1) < r) {
+        # Then we accept sig_prime
+        return(sig)
+    } else {
+        # We keep sig
+        return(sig_prime)
+    }
+
+}
+
+sim_traj <- function(n) {
+    sigma0 <- rep(0, n_items)
+    traj <- list(sigma0)
+
+    for (i in 2:n) {
+        traj[[i]] <- next_sigma(traj[[i - 1]], p, v, P)
+    }
+
+    traj
+}
+
+sim_traj_valeur <- function(n) {
+
+    traj <- sim_traj(n)
+    val <- map_dbl(traj, total_valeur, v)
+
+    list(traj, val)
+}
+
+val_traj <- sim_traj_valeur(1000)
+
+# Get the n indice of the max value in a val_traj
+
+
+
+```
