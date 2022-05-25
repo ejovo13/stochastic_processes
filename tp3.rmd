@@ -1,0 +1,23 @@
+---
+title: "TP3: Randonnée et optimisation"
+author: "Evan Voyles"
+date: "May 25"
+output:
+    pdf_document:
+        highlight: "zenburn"
+        fig_width: 4
+        fig_height: 3
+---
+
+```{R, message = FALSE}
+library(tidyverse)
+library(purrr)
+library(tibble)
+library(ggplot2)
+library(pracma)
+```
+
+Un randonneur se trouve face à un dilemme classique : il aimerait emmener avec lui un maximum d'affaires qui pourraient lui servir mais
+ne souhaite pas alourdir inutiliment son sac, qui ne doit pas dépasser un certain poids $P$. Il cherche donc à déterminer la combinaison d'affaire
+qui vérifierait le meilleur rapport utilité/légèreté. Pour ce faire, il associe à chacune de ses $M$ affaires, son poids $p_i$ et sa valeur
+$v_i$ pour $i \in \{1, \dots, M\}$. L'objectif est de trouver la configuration qui maximise la valeur du sac à dos sans dépasser $P$.
