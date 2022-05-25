@@ -263,3 +263,83 @@ item[as.logical(winning_configuration)]
 
 
 ```
+
+# Implementation of the genetic algorithm
+```{R}
+
+# First thing I want to do is simulate m initial configurations.
+# Let's simulate m initial configurations by using the metropolis
+# algorithm n_met times
+
+m <- 20
+n_met <- 10
+n_gen <- 100
+
+get_init_config <- function(n_met) {
+    traj <- sim_traj(n_met)
+    traj[[n_met]]
+}
+
+get_init_configs <- function(m, n_met) {
+    init_configs <- list()
+    for (i in 1:m) {
+        init_configs[[i]] <- get_init_config(n_met)
+    }
+    init_configs
+}
+
+# Given a list of m current configs, choose the one with the best value
+get_best_config <- function(list_configs) {
+
+    # Calculate the values of each config
+    vals <- map_dbl(list_configs, total_valeur, v)
+    # Compute the max value and find the first index of the max
+    m_val <- max(vals)
+    imax <- detect_index(vals, equals(m_val))
+
+    list_configs[[imax]]
+}
+
+get_next_sigma_gen <- function(sig, best, poids) {
+
+    sig_prime <- propose_sigma_prime(sig)
+
+    if (runif(1) < 0.5) {
+        return(best)
+    } else {
+        if (total_weight(sig_prime, poids) > P) {
+            return(sig)
+        } else {
+            return(sig_prime)
+        }
+    }
+}
+
+n_gen <- 100
+
+M <- list(get_init_configs(m, n_met))
+
+# Now for each step, get the best configuration from the m current configurations
+for (i in 2:n_gen) {
+
+    best_config <- get_best_config(M[[i - 1]])
+
+    current_gen <- M[[i - 1]]
+    next_gen <- list()
+
+    # Now for each specimen in the generation,
+    for (j in 1:m) {
+        next_gen[[j]] <- get_next_sigma_gen(current_gen[[j]], best_config, p)
+    }
+
+    M[[i]] <- next_gen
+}
+
+# Now for each list in M, compute the value of the best_config
+map_dbl(M, function(traj) {
+    best <- get_best_config(traj)
+    total_valeur(best, v)
+})
+
+
+```
