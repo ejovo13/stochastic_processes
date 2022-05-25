@@ -66,40 +66,6 @@ item <- c("map", "water", "sandwich", "glucose", "tin", "banana", "apple", "chee
 p <- c(0.05, 1, 0.7, 0.1, 0.5, 0.2, 0.3, 0.4, 0.5, 0.3, 1, 0.8, 0.4, 0.7, 0.4, 0.3, 0.4, 0.1, 0.3, 0.4, 0.7)
 v <- c(150, 300, 160, 60, 45, 60, 40, 30, 180, 70, 30, 100, 10, 40, 70, 75, 50, 80, 12, 50, 30)
 P <- 7
-n_it <- 1e1
-n_items <- length(item)
-
-
-next_sigma <- function(sig, poids, valeur, P) {
-
-    sig_prime <- propose_sigma_prime(sig)
-
-    if (total_weight(sig_prime, poids) > P) {
-        return(sig)
-    }
-
-    r <- taux_accept(sig, sig_prime, valeur)
-
-    if (runif(1) < r) {
-        # Then we accept sig_prime
-        return(sig)
-    } else {
-        # We keep sig
-        return(sig_prime)
-    }
-
-}
-
-sigma_0 <- rep(0, n_items)
-traj <- list(sigma_0)
-
-item <- c("map", "water", "sandwich", "glucose", "tin", "banana", "apple", "cheese",
-          "beer", "suntan_cream", "camera", "T-shirts", "trousers", "umbrella",
-          "waterproof_trousers", "waterproof_overclothes", "note-case", "sunglasses", "towel",
-          "socks", "book")
-p <- c(0.05, 1, 0.7, 0.1, 0.5, 0.2, 0.3, 0.4, 0.5, 0.3, 1, 0.8, 0.4, 0.7, 0.4, 0.3, 0.4, 0.1, 0.3, 0.4, 0.7)
-v <- c(150, 300, 160, 60, 45, 60, 40, 30, 180, 70, 30, 100, 10, 40, 70, 75, 50, 80, 12, 50, 30)
-P <- 7
 n_it <- 1e3
 n_items <- length(item)
 
@@ -140,13 +106,160 @@ sim_traj_valeur <- function(n) {
     traj <- sim_traj(n)
     val <- map_dbl(traj, total_valeur, v)
 
-    list(traj, val)
+    list(t = traj, v = val)
 }
 
 val_traj <- sim_traj_valeur(1000)
 
 # Get the n indice of the max value in a val_traj
+get_max_val <- function(n) {
 
+    val_traj <- sim_traj_valeur(n)
+    max_val <- max(val_traj$v)
+    i_max <- detect_index(val_traj$v, function(x) { x == max_val })
+
+    list(max = max_val, i = i_max, sigma = val_traj$t[[i_max]])
+}
+
+# Now re run this algorithm 100 times with n = 1e5.
+# Figure out the max of all values
+
+n_traj <- 1e3
+n <- 1e2
+
+max_val_traj <- list()
+
+for (i in 1:n_traj) {
+    max_val_traj[[i]] <- get_max_val(n)
+}
+
+# Now extract the max values
+max_vals <- map_dbl(max_val_traj, function(traj) { traj$max } )
+max_sigmas <- map(max_val_traj, function(traj) { traj$sigma } )
+max(max_vals)
+
+# Consistently, the MAX value that I can get is 1532
+# Let's find the index of 1532
+
+# Function factory
+equals <- function(k) {
+    function(x) {
+        x == k
+    }
+}
+
+i_1532 <- detect_index(max_vals, equals(1532))
+
+winning_configuration <- max_sigmas[[i_1532]]
+
+total_valeur(winning_configuration, v)
+total_weight(winning_configuration, p)
+item[as.logical(winning_configuration)]
+
+```
+
+We are going to go ahead and implement the simulated annealing algorithms
+```{R}
+
+temp_fn <- function(n) {
+    100 / log(n)
+}
+
+taux_accept_recuit <- function(sig, sig_prime, valeur, T) {
+    min(exp((total_valeur(sig, valeur) - total_valeur(sig_prime, valeur)) / T), 1)
+}
+
+# We use the same method to sample the next value
+# We reject if the total weight is larger than P
+# The probability of acceptance will now be
+# P(\sigma, \sigma', T) instead of just P(\sigma, \sigma')
+#' @param
+#' n index used to compute the temperature function
+next_sigma_recuit <- function(sig, poids, valeur, n, P) {
+
+    sig_prime <- propose_sigma_prime(sig)
+
+    if (total_weight(sig_prime, poids) > P) {
+        return(sig)
+    }
+
+    r <- taux_accept_recuit(sig, sig_prime, valeur, temp_fn(n))
+
+    if (runif(1) < r) {
+        # Then we accept sig_prime
+        return(sig)
+    } else {
+        # We keep sig
+        return(sig_prime)
+    }
+
+}
+
+sim_traj_recuit <- function(n) {
+    sigma0 <- rep(0, n_items)
+    traj <- list(sigma0)
+
+    for (i in 2:n) {
+        traj[[i]] <- next_sigma_recuit(traj[[i - 1]], p, v, i - 1, P)
+    }
+
+    traj
+}
+
+sim_traj_valeur_recuit <- function(n) {
+
+    traj <- sim_traj_recuit(n)
+    val <- map_dbl(traj, total_valeur, v)
+
+    list(t = traj, v = val)
+}
+
+val_traj <- sim_traj_valeur_recuit(1000)
+
+# Get the n indice of the max value in a val_traj
+get_max_val_recuit <- function(n) {
+
+    val_traj <- sim_traj_valeur_recuit(n)
+    max_val <- max(val_traj$v)
+    i_max <- detect_index(val_traj$v, function(x) { x == max_val })
+
+    list(max = max_val, i = i_max, sigma = val_traj$t[[i_max]])
+}
+```
+
+```{R}
+
+n_traj <- 1e3
+n <- 1e2
+
+max_val_traj <- list()
+
+for (i in 1:n_traj) {
+    max_val_traj[[i]] <- get_max_val_recuit(n)
+}
+
+# Now extrac the max values
+max_vals <- map_dbl(max_val_traj, function(traj) { traj$max } )
+max_sigmas <- map(max_val_traj, function(traj) { traj$sigma } )
+max(max_vals)
+
+# Consistently, the MAX value that I can get is 1532
+# Let's find the index of 1532
+
+# Function factory
+equals <- function(k) {
+    function(x) {
+        x == k
+    }
+}
+
+i_1532 <- detect_index(max_vals, equals(1532))
+
+winning_configuration <- max_sigmas[[i_1532]]
+
+total_valeur(winning_configuration, v)
+total_weight(winning_configuration, p)
+item[as.logical(winning_configuration)]
 
 
 ```
