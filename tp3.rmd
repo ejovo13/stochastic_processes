@@ -1,7 +1,7 @@
 ---
 title: "TP3: Randonnée et optimisation"
 author: "Evan Voyles"
-date: "May 25"
+date: "27 Mai"
 output:
     pdf_document:
         highlight: "zenburn"
@@ -9,26 +9,24 @@ output:
         fig_height: 3
 ---
 
-```{R, message = FALSE}
-library(tidyverse)
-library(purrr)
-library(tibble)
-library(ggplot2)
-library(pracma)
+```{R, message = FALSE, echo = FALSE}
+library(tidyverse) # plotting
+library(purrr)     # functional programming
+library(pracma)    # linspace, meshgrid type functions
 ```
+Code source disponible [ici](https://github.com/ejovo13/stochastic_processes/blob/main/tp3.rmd)
 
-Un randonneur se trouve face à un dilemme classique : il aimerait emmener avec lui un maximum d'affaires qui pourraient lui servir mais
-ne souhaite pas alourdir inutiliment son sac, qui ne doit pas dépasser un certain poids $P$. Il cherche donc à déterminer la combinaison d'affaire
-qui vérifierait le meilleur rapport utilité/légèreté. Pour ce faire, il associe à chacune de ses $M$ affaires, son poids $p_i$ et sa valeur
-$v_i$ pour $i \in \{1, \dots, M\}$. L'objectif est de trouver la configuration qui maximise la valeur du sac à dos sans dépasser $P$.
+\textbf{Exercice 1}
+On considère un vecteur $\sigma$ (qui contient 0 ou 1 pour l'entrée $i$ selon que l'objet $i$ ait été choisi pour remplir le sac à dos). On
+choisit initialement un vecteur $\sigma$ tel que
 
-\begin{enumerate}
-    \item On condidère un vecteur $\sigma$ (qui contient 0 ou 1 pour l'entrée $i$ selon que l'objet $i$ ait été choisi pour remplir le sac à dos). On
-    choisit initialement un vecteur $\sigma$ tel que
-\end{enumerate}
+\begin{itemize}
+    \item En partant d'une configuration $\sigma$, on propose une configuration $\sigma'$ en modifiant aléatoirement
+    l'un des $\sigma_i$ par $1 - \sigma_i$;
+\end{itemize}
 
+On implémente notre lois de proposition pour l'algorithme de Metropolis avec la fonction \texttt{propose\_sigma\_prime}
 ```{R}
-
 # A partir d'une configuration \sigma, proposer \sigma' en modifiant aleatoirement l'un des
 # \sigma_i par (1 - \sigma_i)
 propose_sigma_prime <- function(sig) {
@@ -39,25 +37,69 @@ propose_sigma_prime <- function(sig) {
     sig[i] <- 1 - sig[i]
     sig
 }
-
-# Return the total weight of the items carried
-total_weight <- function(sig, poids) {
-    sum(sig * poids)
-}
-
-total_valeur <- function(sig, valeur) {
-    sum(sig * valeur)
-}
-
-# We'll use the transition matrix Q(. | V) = N(V, 1)
-# En sachant que \pi(\sigma') / \pi(\sigma) = exp(V_{\sigma'} - V_\sigma),
-# On implemente l'algorithme de metropolis hastings comme suivant:
-taux_accept <- function(sig, sig_prime, valeur) {
-    min(exp(total_valeur(sig, valeur) - total_valeur(sig_prime, valeur)), 1)
-}
-
 ```
 
+\begin{itemize}
+    \item Pour une configuration proposée, on considère qu'elle n'est pas admissible si le poids du sac à
+    dos dépasse $P$. Dans ce cas, elle est automatiquement refusée.
+\end{itemize}
+```{R}
+# Return the total weight of the items carried
+total_weight <- function(sig, poids) { sum(sig * poids) }
+
+# Return the total value of the items carried
+total_valeur <- function(sig, valeur) { sum(sig * valeur) }
+```
+
+\begin{itemize}
+    \item Si la configuration est admissible, alors on poursuit l'algorithme de Metropolis en calculant le taux d'acceptation $r$. Pour cela,
+    on considère la loi cible $\pi$ qui est proportiennelle à $\exp(V_\sigma)$ où $V_\sigma$ est la laveur du sac pour la configuration
+    $\sigma$. $\frac{\pi(\sigma')}{\pi(\sigma)} = \exp(V_{\sigma'} - V_\sigma)$
+\end{itemize}
+
+```{R}
+# En sachant que \pi(\sigma') / \pi(\sigma) = exp(V_{\sigma'} - V_\sigma),
+# On calcule le taux d'acceptation
+#' @param
+#' sig       \sigma actuel
+#' sig_prime \sigma propose
+#' valeurs   un vecteurs des valeurs correspondant aux objets signalés par \sigma
+taux_accept <- function(sig, sig_prime, valeurs, k = 1) {
+    Vsig  <- total_valeur(sig, valeurs)
+    Vsigp <- total_valeur(sig_prime, valeurs)
+    min(exp((Vsigp - Vsig) / k), 1)
+}
+```
+
+Muni avec une lois de proposition et des conditions de rejet, on procède pour écrire l'algorithme de
+Metropolis qui renvoye un vectuer sigma pour la prochaine itération.
+```{R}
+next_sigma <- function(sig, poids, valeurs, P, k = 1) {
+
+    sig_prime <- propose_sigma_prime(sig)
+
+    if (total_weight(sig_prime, poids) > P) {
+        return(sig)
+    }
+
+    r <- taux_accept(sig, sig_prime, valeurs, k)
+
+    if (runif(1) < r) {
+        # Then we accept sig_prime
+        return(sig_prime)
+    } else {
+        # We keep sig
+        return(sig)
+    }
+}
+```
+
+En marchant aléatoirement dans l'espace de tous les permutations de $\sigma$, cette algorithme nous permet de
+générer une suite des $(\sigma_n)_n$ qui obéit deux conditions. La première c'est que la peseur total de $\sigma_n$ ne dépasse jamais
+une valeur donnée $P$. Deuxièmement, la valeur de $V_{\sigma_n}$ à la tendance à croire.
+
+
+\textbf{Exercice 2} Mettre en pratique avec les données suivantes :
 ```{R}
 item <- c("map", "water", "sandwich", "glucose", "tin", "banana", "apple", "cheese",
           "beer", "suntan_cream", "camera", "T-shirts", "trousers", "umbrella",
@@ -68,61 +110,139 @@ v <- c(150, 300, 160, 60, 45, 60, 40, 30, 180, 70, 30, 100, 10, 40, 70, 75, 50, 
 P <- 7
 n_it <- 1e3
 n_items <- length(item)
+```
 
-
-next_sigma <- function(sig, poids, valeur, P) {
-
-    sig_prime <- propose_sigma_prime(sig)
-
-    if (total_weight(sig_prime, poids) > P) {
-        return(sig)
-    }
-
-    r <- taux_accept(sig, sig_prime, valeur)
-
-    if (runif(1) < r) {
-        # Then we accept sig_prime
-        return(sig)
-    } else {
-        # We keep sig
-        return(sig_prime)
-    }
-
-}
-
-sim_traj <- function(n) {
+On commence en écrivant une fonction qui simule une trajectoire de notre Chaîne de Markov qui part
+de $\sigma_0 = \mathbf{0}$.
+```{R}
+sim_traj <- function(n, k = 1) {
     sigma0 <- rep(0, n_items)
     traj <- list(sigma0)
 
     for (i in 2:n) {
-        traj[[i]] <- next_sigma(traj[[i - 1]], p, v, P)
+        traj[[i]] <- next_sigma(traj[[i - 1]], p, v, P, k)
     }
 
     traj
 }
+```
 
-sim_traj_valeur <- function(n) {
+Ensuite on utilise la fonction \texttt{purrr::map\_dbl} pour calculer la valeur de chaque configuration
+$\sigma_n$ dans notre vecteur \texttt{traj}.
+```{R}
+sim_traj_valeur <- function(n, k = 1) {
 
-    traj <- sim_traj(n)
+    traj <- sim_traj(n, k)
     val <- map_dbl(traj, total_valeur, v)
 
     list(t = traj, v = val)
 }
 
-val_traj <- sim_traj_valeur(1000)
+```
 
+et on plotte une trajectoire de $V_{\sigma_i}$
+
+```{R, fig.align = "center"}
+n <- 1000
+n_traj <- 20
+
+val_traj <- sim_traj_valeur(n)
+
+tibble(ind = 1:n, vals = val_traj$v) |>
+    ggplot(aes(ind, vals)) +
+    geom_line() +
+    labs(x = "indice", y = "valeur")
+```
+
+On pourrait simuler plusiers trajectoires sur le même graphique avec la fonction \texttt{plot\_traj\_val}.
+```{R, echo = FALSE, fig.widht = 7}
+plot_traj_val <- function(n, n_traj, k = 1) {
+
+    traj_1 <- sim_traj_valeur(n, k)
+    # First we want to store the trajectories in a tibble
+    df <- tibble(ind = 1:n, val = traj_1$v)
+
+    # Now we want to add trajectories 2 through n_traj
+    for (i in (seq_len(n_traj - 1) + 1)) {
+        t <- sim_traj_valeur(n)
+        df <- add_column(df, t$v, .name_repair = "unique")
+    }
+
+    # Here we rename the columns
+    new_names <- c("n", as.character(1:n_traj))
+    names(df) <- new_names
+
+    # And pivot to a longer data frame
+    df <- df |> pivot_longer(2:(n_traj + 1), names_to = "traj", values_to = "val")
+    df |> ggplot(aes(n, val, col = traj)) + geom_line() + theme(legend.position = "none") +
+    labs(title = "Méthode de Metropolis")
+
+}
+```
+
+```{R, message = FALSE, fig.align = "center"}
+plot_traj_val(1000, 10)
+```
+
+On remarque qu'il y a beaucoup de transitions lorsque $n < 125$ donc on lance encore des trajectoires mais cette fois-ci avec $n = 125$.
+
+```{R, message = FALSE, fig.align = "center"}
+plot_traj_val(125, 20)
+```
+Si on aimerait trouver visuellement un maximum, on lance 100 trajectoires
+```{R, message = FALSE, fig.align = "center"}
+set.seed(10)
+plot_traj_val(100, 100)
+```
+
+
+Il nous semble qu'il existent plusiers configurations "stables" où c'est difficile d'accepter tout $\sigma'$ proposé, et c'est pour cela que
+nous observons des trajectoires qui se stabilisent. On voit que certaines trajectoires s'immobilisent avec une valeur à peu près
+800, tandis ce que des autres trajectoires dépassent à peine le seuil de 1500.
+
+\begin{itemize}
+    \item[(b)] Parmi les configurations visitées, laquelle correspond à la meilleure valeur totale du sac ? Pour quelle valeur de $n$ est-elle
+    obtenue? Renvoyer le contenu du sac correspondant.
+\end{itemize}
+
+On pourrait écrire une fonction pour trouver la valeur maximum d'une trajectoire et aussi son premier indice.
+
+```{R}
 # Get the n indice of the max value in a val_traj
 get_max_val <- function(n) {
 
     val_traj <- sim_traj_valeur(n)
     max_val <- max(val_traj$v)
-    i_max <- detect_index(val_traj$v, function(x) { x == max_val })
+    i_max <- purrr::detect_index(val_traj$v, function(x) { x == max_val })
 
     list(max = max_val, i = i_max, sigma = val_traj$t[[i_max]])
 }
+```
 
+On utilise cette fonction pour une trajectoire quiconque de taille $n = 1000$ et on extrait l'indice maximum et la configuration
+correspondante du sac.
+```{R}
+mv <- get_max_val(1000); mv
+```
+
+Ce qui correspond à emmener les objets suivants
+
+```{R}
+item[as.logical(mv$sigma)]
+```
+qui pèse
+```{R}
+total_weight(mv$sigma, p)
+```
+ce qui est admissible.
+
+\begin{itemize}
+    \item[(c)] Relancer 100 fois l'algorithme en allant jusqu'à $n = 10000$. Commenter les résultats.
+\end{itemize}
+
+```{R}
 # Now re run this algorithm 100 times with n = 1e5.
-# Figure out the max of all values
+# to figure out the max of all max values
 
 n_traj <- 1e3
 n <- 1e2
@@ -136,10 +256,9 @@ for (i in 1:n_traj) {
 # Now extract the max values
 max_vals <- map_dbl(max_val_traj, function(traj) { traj$max } )
 max_sigmas <- map(max_val_traj, function(traj) { traj$sigma } )
-max(max_vals)
 
-# Consistently, the MAX value that I can get is 1532
-# Let's find the index of 1532
+# The MAX value that I can get is 1532
+# Let's find the index of the max max val
 
 # Function factory
 equals <- function(k) {
@@ -148,27 +267,87 @@ equals <- function(k) {
     }
 }
 
-i_1532 <- detect_index(max_vals, equals(1532))
+i_max <- detect_index(max_vals, equals(max(max_vals)))
+winning_configuration <- max_sigmas[[i_max]]
 
-winning_configuration <- max_sigmas[[i_1532]]
-
-total_valeur(winning_configuration, v)
-total_weight(winning_configuration, p)
-item[as.logical(winning_configuration)]
+list(
+        val = total_valeur(winning_configuration, v),
+        p = total_weight(winning_configuration, p),
+        items = item[as.logical(winning_configuration)]
+    )
 
 ```
 
-We are going to go ahead and implement the simulated annealing algorithms
+La valeur maximum que je trouve parmi les valeurs maximum d'un grand nombre de trajectoires est bien 1532.
+
+\begin{itemize}
+    \item[(d)] Réessayer en prenant cette fois une loi cible $\pi$ qui est proportionnelle à $\exp(V_\sigma/10)$, puis
+    $\exp(V_\sigma/100)$.
+\end{itemize}
+
+On introduit le paramètre $k$ pour encoder une loi cible proportiennelle à $\exp(V_\sigma/k)$, et on écrit une
+fonction pour avoir le vecteur des valeurs maximums pour $n_{traj}$ trajectoires de taille $n$.
 ```{R}
+# Let's check out the distributions of the means
+
+get_max_metropolis <- function(n_traj, n, k) {
+    map_dbl(rep(n, n_traj), function(n) {
+      traj <- sim_traj_valeur(n, k)
+      traj$v[[n]]
+    })
+}
+```
+
+```{R, echo = FALSE, message = FALSE, fig.align = "center"}
+n_traj <- 100
+n <- 10000
+
+val_1 <- get_max_metropolis(n_traj, n, 1)
+val_10 <- get_max_metropolis(n_traj, n, 10)
+val_100 <- get_max_metropolis(n_traj, n, 100)
+
+df <- tibble(`1` = val_1, `10` = val_10, `100` = val_100)
+df <- df |> pivot_longer(1:3, names_to = "k", values_to = "max")
+
+df |> ggplot(aes(max, col = k)) + geom_dotplot() + facet_wrap(~k) + labs(title = "Distributions des maximums", subtitle = "100 trajectoires de taille 10000")
+
+```
+
+Il nous semble que diviser la valeur $V_\sigma$ par 10 pendant le calcul du taux d'acceptation est optimale. Changer ce taux a l'effet de réduire les
+les $\sigma'$ qui sont proposés si la différence de valeur entre $V_{\sigma'}$ et $V_{\sigma}$. Cependant, si on divise cet écart par 100, peut-être il rend
+le taux d'acceptation trop petit, et on n'accepte pas assez des nouveaux $\sigma'$ proposés. On conclut que
+la valeur de 10 reste équilibré entre $1$ et $100$.
+
+\textbf{Exercice 3} Implémenter l'algorithme du recuit simulé avec un schéma de température logarithmique $T_n = 100/\log (n)$
+```{R, fig.align = "center"}
 
 temp_fn <- function(n) {
     100 / log(n)
 }
+```
 
+```{R, fig.align = "center", echo = FALSE}
+tibble(n = 1:10000, T = map_dbl(1:10000, temp_fn)) |> ggplot(aes(n, T)) + geom_line()
+
+```
+
+\begin{itemize}
+    \item[(a)] Quelle va être la différence par rapport à l'algorithme de Metropolis ?
+\end{itemize}
+
+La différence principale apparait pendant le calcul du taux d'acceptation. Avec l'algorithme du recuit simulé on va influencer
+ce taux d'acceptation en divisant $V_{\sigma'} - V_{\sigma}$ par la température $T_n$. Contrairement à la partie (d)
+de l'exercice précedente, cette diviseur sera une valeur en fonction de $n$, l'itération actuelle.
+
+```{R}
 taux_accept_recuit <- function(sig, sig_prime, valeur, T) {
     min(exp((total_valeur(sig, valeur) - total_valeur(sig_prime, valeur)) / T), 1)
 }
+```
 
+On modifie alors les fonctions précedentes pour utiliser le nouveau taux d'acceptation.
+
+```{R, echo = FALSE}
 # We use the same method to sample the next value
 # We reject if the total weight is larger than P
 # The probability of acceptance will now be
@@ -225,69 +404,165 @@ get_max_val_recuit <- function(n) {
 
     list(max = max_val, i = i_max, sigma = val_traj$t[[i_max]])
 }
+
+plot_traj_val_recuit <- function(n, n_traj) {
+
+    traj_1 <- sim_traj_valeur_recuit(n)
+    # First we want to store the trajectories in a tibble
+    df <- tibble(ind = 1:n, val = traj_1$v)
+
+    # Now we want to add trajectories 2 through n_traj
+    for (i in (seq_len(n_traj - 1) + 1)) {
+        t <- sim_traj_valeur_recuit(n)
+        df <- add_column(df, t$v, .name_repair = "unique")
+    }
+
+    # Here we rename the columns
+    new_names <- c("n", as.character(1:n_traj))
+    names(df) <- new_names
+
+    # And pivot to a longer data frame
+    df <- df |> pivot_longer(2:(n_traj + 1), names_to = "traj", values_to = "val")
+    df |>
+        ggplot(aes(n, val, col = traj)) +
+        geom_line() +
+        theme(legend.position = "none") +
+        labs(title = "Trajectoires du recuit simulé")
+
+}
+
+get_max_recuit <- function(n_traj, n) {
+    map_dbl(rep(n, n_traj), function(n) {
+      traj <- sim_traj_valeur_recuit(n)
+      traj$v[[n]]
+    })
+}
 ```
 
-```{R}
+\begin{itemize}
+    \item[(b)] Comparer les résultats avec ceux obtenus précédemment
+\end{itemize}
 
+```{R, fig.align = "center", message = FALSE}
+plot_traj_val_recuit(1000, 20)
+```
+
+Visuellement on ne voit pas une grande différence. Pour comparer les deux algorithmes, on pourrait étudier la distribution
+des valeurs maximums des trajectoires générées selon l'algorithme de Metropolis et selon l'algorithme du recuit simulé.
+
+```{R, fig.align = "center"}
+n_traj <- 100
+n <- 10000
+
+max_values <- get_max_metropolis(n_traj, n, 1)
+max_values_recuit <- get_max_recuit(n_traj, n)
+```
+
+
+```{R, fig.align = "center", echo = FALSE}
+df <- tibble(Metropolis = max_values, Recuit_Simule = max_values_recuit)
+df <- df |> pivot_longer(1:2, names_to = "Algorithme", values_to = "max")
+hist(max_values, main ="Metropolis")
+summary(max_values)
+
+hist(max_values_recuit, main = "Recuit Simulé")
+summary(max_values_recuit)
+
+df |> ggplot(aes(max, col = Algorithme)) + geom_density()
+
+```
+
+L'algorithme du recuit simulé non seulement a une moyenne de la valeur maximum d'une trajectoire qui est supérieure
+à celle des trajectoires générées par l'algorithme de Metropolis, il a aussi un minimum de 862 plus grand que 712 du Metropolis.
+On observe que pour l'algorithme du recuit simulé, il y a plus de masse pour les valeurs plus grandes; la distribution
+des maximums observés est penché à droite. Regardons les deux derniers bâtons dans les histograms pour voir à telle difference
+l'algorithme du recuit simulé génère des valeurs proches du maximum.
+
+Il serait peut etre aussi intéressant de voir combien de trajectoires de taille $n$ finit par trouver la valeur maximum, $V^* = 1532$.
+
+On présente tout d'abord le nombre de trajectoires qui, après $n$ itérations, sont tombés sur la valeur optimale $V^* = 1532$, suivi par le portion sur toutes les trajectoires.
+
+```{R, fig.align = "center"}
+n_met <- sum(max_values == 1532); n_met; n_met / n_traj
+n_rec <- sum(max_values_recuit == 1532); n_rec; n_rec / n_traj
+```
+
+
+On finit la discussion en remarquant que l'on tombe sur la même configuration optimale avec l'algorithme du recuit simulé. De plus,
+il est plus probable que l'on tombe sur la configuration optimale en utilisant la méthode du recuit simulé.
+```{R}
 n_traj <- 1e3
 n <- 1e2
 
 max_val_traj <- list()
-
 for (i in 1:n_traj) {
     max_val_traj[[i]] <- get_max_val_recuit(n)
 }
 
-# Now extrac the max values
+# Now extract the max values
 max_vals <- map_dbl(max_val_traj, function(traj) { traj$max } )
 max_sigmas <- map(max_val_traj, function(traj) { traj$sigma } )
-max(max_vals)
 
-# Consistently, the MAX value that I can get is 1532
-# Let's find the index of 1532
+i_max <- detect_index(max_vals, equals(max(max_vals)))
+winning_configuration <- max_sigmas[[i_max]]
 
-# Function factory
-equals <- function(k) {
-    function(x) {
-        x == k
-    }
-}
-
-i_1532 <- detect_index(max_vals, equals(1532))
-
-winning_configuration <- max_sigmas[[i_1532]]
-
-total_valeur(winning_configuration, v)
-total_weight(winning_configuration, p)
-item[as.logical(winning_configuration)]
-
-
+list(
+        val = total_valeur(winning_configuration, v),
+        p = total_weight(winning_configuration, p),
+        items = item[as.logical(winning_configuration)]
+    )
 ```
 
-# Implementation of the genetic algorithm
+
+\textbf{Exercice 4} On teste une troisième technique d'exploration, appelée algorithme génétique.
+Il s'agit ici de reproduire les principes du brassage génétique grâce à la sélection et la mutation.
+
+\begin{itemize}
+    \item On simule $m$ configurations
+\end{itemize}
+
+On produit $m$ configurations en utilisant l'algorithme du recuit simulé avec $n_{rec}$
+itérations.
 ```{R}
-
-# First thing I want to do is simulate m initial configurations.
-# Let's simulate m initial configurations by using the metropolis
-# algorithm n_met times
-
 m <- 20
-n_met <- 10
+n_rec <- 10
 n_gen <- 100
 
-get_init_config <- function(n_met) {
-    traj <- sim_traj(n_met)
-    traj[[n_met]]
+
+get_init_config <- function(n_rec) {
+    traj <- sim_traj_recuit(n_rec)
+    traj[[n_rec]] # extract the final configuration of a trajectory
 }
 
-get_init_configs <- function(m, n_met) {
+# Generate m initial configurations running the simulated annealing algorithm
+get_init_configs <- function(m, n_rec) {
     init_configs <- list()
     for (i in 1:m) {
-        init_configs[[i]] <- get_init_config(n_met)
+        init_configs[[i]] <- get_init_config(n_rec)
     }
     init_configs
 }
+```
 
+On pourrait avoir, par example :
+```{R}
+get_init_configs(10, 100)
+```
+
+
+\begin{itemize}
+    \item Pour chacune des $m$ configurations, on définit l'état suivant selon ce principe :
+\end{itemize}
+
+\begin{enumerate}
+    \item Avec probabilité $1/2$, l'état suivant est égal à la meilleure des $m$ configurations actuelles
+    \item Avec probabilité $1/2$, on utilise \texttt{propose\_sigma\_prime} pour générer un $\sigma'$ admissible.
+\end{enumerate}
+
+Pour procéder, on devrait définir une nouvelle fonction qui, parmi une liste de $m$ configurations, nous
+renvoie la configuration avec la meilleure valeur.
+
+```{R}
 # Given a list of m current configs, choose the one with the best value
 get_best_config <- function(list_configs) {
 
@@ -299,7 +574,12 @@ get_best_config <- function(list_configs) {
 
     list_configs[[imax]]
 }
+```
 
+Ensuite, on écrit une fonction pour générer la nouvelle génération de $m$ configurations, suivant la règle dans l'énoncé de
+l'algorithme.
+
+```{R}
 get_next_sigma_gen <- function(sig, best, poids) {
 
     sig_prime <- propose_sigma_prime(sig)
@@ -314,32 +594,142 @@ get_next_sigma_gen <- function(sig, best, poids) {
         }
     }
 }
+```
 
-n_gen <- 100
+\begin{itemize}
+    \item Appliquer cette nouvelle méthode avec $m = 100$ à vos données et commenter.
+\end{itemize}
 
-M <- list(get_init_configs(m, n_met))
+On écrit tout d'abord la fonction pour simuler une trajectoire suivant l'algorithme génétique.
+```{R}
+sim_traj_gen <- function(m, n_gen, n_rec_initial = 20) {
 
-# Now for each step, get the best configuration from the m current configurations
-for (i in 2:n_gen) {
+    M <- list(get_init_configs(m, n_rec_initial))
 
-    best_config <- get_best_config(M[[i - 1]])
+    # Now for each step, get the best configuration from the m current configurations
+    for (i in (seq_len(n_gen - 1) + 1)) {
 
-    current_gen <- M[[i - 1]]
-    next_gen <- list()
+        best_config <- get_best_config(M[[i - 1]])
 
-    # Now for each specimen in the generation,
-    for (j in 1:m) {
-        next_gen[[j]] <- get_next_sigma_gen(current_gen[[j]], best_config, p)
+        current_gen <- M[[i - 1]]
+        next_gen <- list()
+
+        # Now for each specimen in the generation,
+        for (j in 1:m) {
+            next_gen[[j]] <- get_next_sigma_gen(current_gen[[j]], best_config, p)
+        }
+
+        M[[i]] <- next_gen
     }
 
-    M[[i]] <- next_gen
+    M
+}
+```
+Puis une fonction qui, pour une famille de $m$ configurations donné, renvoie la valeur maximum.
+```{R}
+best_gen_vals <- function(m, n, n_rec = 20) {
+    M = sim_traj_gen(m, n, n_rec)
+    map_dbl(M, function(traj) {
+      best <- get_best_config(traj)
+      total_valeur(best, v)
+    })
+}
+```
+
+```{R, message = FALSE, echo = FALSE}
+plot_traj_val_gen <- function(m, n, n_traj, n_rec = 20) {
+
+    traj_1 <- best_gen_vals(m, n, n_rec)
+    # First we want to store the trajectories in a tibble
+    df <- tibble(ind = 1:n, val = traj_1)
+
+    # Now we want to add trajectories 2 through n_traj
+    for (i in (seq_len(n_traj - 1) + 1)) {
+        t <- best_gen_vals(m, n, n_rec)
+        df <- add_column(df, t, .name_repair = "unique")
+    }
+
+    # Here we rename the columns
+    new_names <- c("n", as.character(1:n_traj))
+    names(df) <- new_names
+
+    # And pivot to a longer data frame
+    df <- df |> pivot_longer(2:(n_traj + 1), names_to = "traj", values_to = "val")
+    df |>
+        ggplot(aes(n, val, col = traj)) +
+        geom_line() +
+        theme(legend.position = "none") +
+        labs(title = "Trajectoires génétiques")
+
+}
+```
+
+Plotons 100 trajectoires de 100 générations des familles de tailles $m = 100$:
+
+```{R, fig.align = "center", message = FALSE}
+plot_traj_val_gen(m = 100, n = 100, n_traj = 100)
+```
+
+Comparons cela avec les trajectoires selon la méthode de Metropolis
+
+```{R, fig.align = "center", message = FALSE}
+plot_traj_val(n = 100, n_traj = 100)
+```
+ et l'algorithme du recuit simulé
+
+```{R, fig.align = "center", message = FALSE}
+plot_traj_val_recuit(n = 100, n_traj = 100)
+```
+
+Il est évident que les trajectoires converge vers le maximum $V = 1532$ le plus vite avec l'algorithme génétique.
+Les trajectoires sont beaucoup plus serrés que pour les autre méthodes.
+
+```{R, echo = FALSE}
+# Let's try and get a histogram of the distributions
+# For 1000 traj
+
+n_traj <- 100
+m <- 100
+n <- 1000
+
+get_max_gen <- function(m, n, n_traj) {
+
+    means <- rep(0, n_traj)
+    for (i in 1:n_traj) {
+        traj <- best_gen_vals(m, n)
+        means[i] <- traj[n]
+    }
+
+    means
+
 }
 
-# Now for each list in M, compute the value of the best_config
-map_dbl(M, function(traj) {
-    best <- get_best_config(traj)
-    total_valeur(best, v)
-})
+```
 
+```{R, fig.align = "center", message = FALSE}
+max_vals_gen <- get_max_gen(m, n, n_traj)
+max_vals_rec <- get_max_recuit(n_traj, n)
+max_vals_met <- get_max_metropolis(n_traj, n, 1)
+
+df <- tibble(metropolis = max_vals_met, recuit = max_vals_rec, genetique = max_vals_gen)
+
+df <- df |> pivot_longer(1:3, names_to = "algorithme", values_to = "valeur")
+
+df |> ggplot(aes(valeur, col = algorithme)) + geom_boxplot(aes(fill = algorithme), alpha = 0.5) +
+  labs(title = "Boxplot des valeurs maximums", subtitle = "sur 100 trajectoires de taille 1000")
 
 ```
+
+On remarque que presque toutes les trajectoires de l'algorithme génétique tombent sur la valeur maximum,
+déja dans 1000 itérations! On a dû simuler 10000 itérations pour que la méthode de métropolis avec scalaire
+de division $k = 10$ pourrait avoir une majorité de trajectoire qui finissent à 1532.
+
+On peut conclure donc que l'algorithme génétique converge vers la vrai maximum beaucoup plus vite au nivea de nombre
+d'itérations. On s'explique cela en considérant qu'il y a une famille de $m = 100$ configurations qui se mutent ensemble,
+choissisant de garder environ 50 configurations qui est la meilleure parmi toute la famille, et laisser que les autres se modifient aléatoirement.
+Choisir parfois la meilleure et parfois une modification nous aide à éviter de s'immobiliser sur une certaine valeur, comme on
+explore l'espace des états par plusiers trajectoires en même temps.
+
+Il serait intéressant de voir la distribution des moyennes en fonction non de la taille d'une trajectoire, sinon le temps de calcul d'en réaliser. Cela est une
+considération parce que pour chaque itération dans une trajectoire de l'algorithme génétique, on effectue $m$ propositions de $\sigma'$. Par conséquent, la compléxité
+de cet algorithme est plus important.
